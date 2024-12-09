@@ -1,0 +1,65 @@
+version: '3.9'
+
+networks:
+  appweb:
+
+services:
+  db_account:
+    image: mariadb
+    environment:
+      MYSQL_ROOT_PASSWORD: 200404
+      MYSQL_DATABASE: account
+    networks:
+      - appweb
+    volumes:
+      - db-data:/home/mt3k/mysql_volumen/account
+      
+  db_sensor:
+    image: mariadb
+    environment:
+      MYSQL_ROOT_PASSWORD: 200404
+      MYSQL_DATABASE: sensor
+    networks:
+      - appweb
+    volumes:
+      - db-data:/home/mt3k/mysql_volumen/sensor
+
+  api_account:
+    build: ./service-account/
+    volumes:
+      - /api_account:/code
+    ports:
+      - "5000:5000"
+    networks:
+      - appweb
+    depends_on:
+      - db_account
+
+
+  api_sensor:
+    build: ./service-sensor/  
+    volumes:
+      - /api_sensor:/code
+    ports:
+      - "5001:5001"
+    networks:
+      - appweb
+    depends_on:
+      - db_sensor
+
+  front:
+    build: ./O2M-frontend
+    volumes:
+      - /front:/code
+    ports:
+      - "3000:3000"
+    networks:
+      - appweb
+    depends_on:
+      - api_account
+      - api_sensor
+
+volumes:
+  db-data:
+
+
