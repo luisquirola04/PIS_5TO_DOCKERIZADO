@@ -42,14 +42,17 @@ jobs:
     needs: docker-build-sign
     uses: ./.github/workflows/container-image-scan.yml
     with:
-      image-tag: ${{ needs.docker-build-sign.outputs.image-tag }}
+      # ✅ CORREGIDO: Usamos .outputs.image (no image-tag)
+      image-tag: ${{ needs.docker-build-sign.outputs.image }}
     permissions:
       security-events: write
 
   # 5️⃣ DAST (OWASP ZAP)
   dast:
     name: DAST Scan
-    needs: container-scan
+    # ✅ CORREGIDO: Añadimos 'docker-build-sign' a needs para poder leer sus outputs
+    needs: [container-scan, docker-build-sign]
     uses: ./.github/workflows/dast.yml
     with:
-      image-tag: ${{ needs.docker-build-sign.outputs.image-tag }}
+      # ✅ CORREGIDO: Usamos .outputs.image
+      image-tag: ${{ needs.docker-build-sign.outputs.image }}
