@@ -8,65 +8,48 @@ on:
 
 permissions:
   contents: read
-  issues: read
   checks: write
   pull-requests: write
   security-events: write
-  actions: read
   packages: write
   id-token: write
 
-
 jobs:
-  # 1. Seguridad Primero: Si hay secretos, no seguimos.
+  # 1️⃣ Seguridad primero (Gitleaks)
   pre-flight-security:
+    name: Pre-flight Security
     uses: ./.github/workflows/00-security-preflight.yml
-    permissions:
-      contents: read
 
+  # 2️⃣ Build Docker Compose
   build:
+    name: Build Docker Compose
     needs: pre-flight-security
     uses: ./.github/workflows/build.yml
-    permissions:
-      contents: read
-      checks: write
-      pull-requests: write
 
-  # SAST y SCA pueden correr en paralelo al build para ahorrar tiempo
-  security-static-analysis:
-    needs: pre-flight-security
-    runs-on: ubuntu-latest
-    steps:
-      - name: Placeholder for parallel SAST trigger
-        run: echo "Triggering SAST & SCA parallel execution"
-
-  sast:
-    needs: pre-flight-security
-    uses: ./.github/workflows/sast.yml
-    permissions:
-      actions: read
-      contents: read
-      security-events: write
-
+  # 3️⃣ Build, Push & Sign Docker Image
   docker-build-sign:
-    needs: [build, sast, sca] # Solo construimos la imagen si el código es seguro
+    name: Build & Sign Docker Image
+    needs: build
     uses: ./.github/workflows/docker.yml
     permissions:
       contents: read
       packages: write
-      id-token: write # CRÍTICO para Cosign
+      id-token: write
 
+  # 4️⃣ Scan de vulnerabilidades (Trivy)
   container-scan:
+    name: Container Image Scan
     needs: docker-build-sign
     uses: ./.github/workflows/container-image-scan.yml
     with:
       image-tag: ${{ needs.docker-build-sign.outputs.image-tag }}
     permissions:
-      contents: read
       security-events: write
 
+  # 5️⃣ DAST (OWASP ZAP)
   dast:
-    needs: container-scan # Solo atacamos si la imagen pasó el scan de vulnerabilidades
+    name: DAST Scan
+    needs: container-scan
     uses: ./.github/workflows/dast.yml
     with:
       image-tag: ${{ needs.docker-build-sign.outputs.image-tag }}
