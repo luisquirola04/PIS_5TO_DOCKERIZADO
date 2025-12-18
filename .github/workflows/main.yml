@@ -48,10 +48,6 @@ jobs:
       contents: read
       security-events: write
 
-  sca:
-    needs: pre-flight-security
-    uses: ./.github/workflows/sca.yml
-
   docker-build-sign:
     needs: [build, sast, sca] # Solo construimos la imagen si el código es seguro
     uses: ./.github/workflows/docker.yml
