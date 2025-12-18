@@ -3,19 +3,19 @@ name: 06 Build & Sign Docker Image
 on:
   workflow_call:
     outputs:
-      image-tag:
-        value: ${{ jobs.docker.outputs.image-tag }}
+      image:
+        value: ${{ jobs.docker.outputs.image }}
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}/o2m-frontend
+  IMAGE_NAME: luisquirola04/pis_5to_dockerizado/o2m-frontend
 
 jobs:
   docker:
     runs-on: ubuntu-latest
 
     outputs:
-      image-tag: ${{ steps.image-ref.outputs.image }}
+      image: ${{ steps.image.outputs.image }}
 
     permissions:
       contents: read
@@ -23,62 +23,45 @@ jobs:
       id-token: write
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Install Cosign
-        uses: sigstore/cosign-installer@v3.3.0
+      - uses: docker/setup-buildx-action@v3
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Login to GHCR
-        uses: docker/login-action@v3
+      - uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ghcr.io/${{ env.IMAGE_NAME }}
-          tags: |
-            type=sha,format=long
-            type=ref,event=branch
-
-      - name: Build and Push image
+      - name: Build & Push
         id: build
         uses: docker/build-push-action@v5
         with:
           context: ./O2M-frontend
           file: ./O2M-frontend/Dockerfile
           push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          tags: |
+            ghcr.io/${{ env.IMAGE_NAME }}:latest
 
-   
-      - name: Define image reference
-        id: image-ref
+      - name: Export image ref
+        id: image
         run: |
-          IMAGE="ghcr.io/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}"
-          echo "image=$IMAGE" >> $GITHUB_OUTPUT
+          echo "image=ghcr.io/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}" >> $GITHUB_OUTPUT
+
+      - name: Pull image
+        run: docker pull ${{ steps.image.outputs.image }}
 
       - name: Generate SBOM
         uses: anchore/sbom-action@v0
         with:
-          image: ${{ steps.image-ref.outputs.image }}
+          image-ref: ${{ steps.image.outputs.image }}
           format: cyclone-dx-json
           output-file: sbom.json
 
-      - name: Sign image with Cosign
-        run: cosign sign --yes ${{ steps.image-ref.outputs.image }}
+      - name: Sign image
+        run: cosign sign --yes ${{ steps.image.outputs.image }}
 
-      - name: Upload SBOM
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
           name: sbom-o2m-frontend
           path: sbom.json
