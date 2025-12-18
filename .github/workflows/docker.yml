@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
 
     outputs:
-      image-tag: ${{ steps.meta.outputs.tags }}
+      image-tag: ${{ steps.image-ref.outputs.image }}
 
     permissions:
       contents: read
@@ -60,18 +60,22 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+   
+      - name: Define image reference
+        id: image-ref
+        run: |
+          IMAGE="ghcr.io/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}"
+          echo "image=$IMAGE" >> $GITHUB_OUTPUT
+
       - name: Generate SBOM
         uses: anchore/sbom-action@v0
         with:
-          image: ${{ steps.meta.outputs.tags }}
+          image: ${{ steps.image-ref.outputs.image }}
           format: cyclone-dx-json
           output-file: sbom.json
 
       - name: Sign image with Cosign
-        env:
-          TAGS: ${{ steps.meta.outputs.tags }}
-          DIGEST: ${{ steps.build.outputs.digest }}
-        run: cosign sign --yes "${TAGS}@${DIGEST}"
+        run: cosign sign --yes ${{ steps.image-ref.outputs.image }}
 
       - name: Upload SBOM
         uses: actions/upload-artifact@v4
