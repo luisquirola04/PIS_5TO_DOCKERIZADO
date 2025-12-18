@@ -46,33 +46,21 @@ jobs:
         run: docker pull ${{ env.IMAGE_TAG }}
 
       - name: Start demo app container
-        # -p 8080:3000 -> El host usa 8080, el contenedor escucha en el 3000 (según tu Dockerfile)
+        # Mapeamos puerto 8080 (GitHub) -> 3000 (Tu App Next.js)
         run: |
           docker rm demoApp || true 
           docker run -d -p 8080:3000 --name demoApp ${{ env.IMAGE_TAG }}
 
       - name: Wait for container to start
-        id: wait-for-app
-        # Esperamos a que responda localhost:8080 (que ahora redirige al 3000 del contenedor)
         run: |
           echo "Waiting for http://localhost:8080..."
           timeout 60 bash -c 'while [[ "$(curl -s -o /dev/null -w ''%{http_code}'' localhost:8080)" != "200" ]]; do sleep 5; done' || false
 
-      # Mantenemos el debug por si acaso falla por otra razón (como el binding de IP)
-      - name: Debug Container Failure
-        if: failure()
-        run: |
-          echo "::error::La aplicación no respondió."
-          docker ps -a
-          docker logs demoApp
-
-      - name: Test container connectivity
-        run: curl -v localhost:8080
-
       - name: ZAP Full Scan
-        uses: zaproxy/action-full-scan@v0.11.0
+        uses: zaproxy/action-full-scan@v0.12.0 # He actualizado la versión de la acción también (opcional pero recomendado)
         with:
-          docker_name: 'owasp/zap2docker-stable'
+         
+          docker_name: 'zaproxy/zap-stable'
           token: ${{ secrets.GITHUB_TOKEN }}
           target: 'http://localhost:8080'
           cmd_options: '-a -j -l WARN -z "-addoninstallall"'
