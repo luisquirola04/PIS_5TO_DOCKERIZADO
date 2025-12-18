@@ -17,7 +17,6 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  # ❌ ELIMINADO: IMAGE_TAG aquí falla en workflow_call. Lo definiremos en los steps.
 
 jobs:
   dast-scan:
@@ -31,40 +30,41 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # ✅ NUEVO PASO: Configuración segura de la variable
       - name: Setup Image Tag
         run: |
-          # Prioridad 1: Input de workflow_call (desde el main)
           TAG="${{ inputs.image-tag }}"
-          
-          # Prioridad 2: Input manual (workflow_dispatch) si el anterior está vacío
           if [ -z "$TAG" ]; then
             TAG="${{ github.event.inputs.image-tag }}"
           fi
-          
-          # Validación final
           if [ -z "$TAG" ]; then
             echo "::error::No se proporcionó image-tag."
             exit 1
           fi
-
           echo "IMAGE_TAG=$TAG" >> $GITHUB_ENV
-          echo "Target Image: $TAG"
 
-      # Aseguramos que tenemos la imagen antes de correrla
       - name: Pull Docker Image
         run: docker pull ${{ env.IMAGE_TAG }}
 
       - name: Start demo app container
-        # Usamos --network host para facilitar que ZAP vea la app (opcional pero recomendado en actions)
-        # O mantenemos el mapeo de puertos estándar si ZAP corre en la red del host.
+        # -p 8080:3000 -> El host usa 8080, el contenedor escucha en el 3000 (según tu Dockerfile)
         run: |
           docker rm demoApp || true 
-          docker run -d -p 8080:8080 --name demoApp ${{ env.IMAGE_TAG }}
+          docker run -d -p 8080:3000 --name demoApp ${{ env.IMAGE_TAG }}
 
       - name: Wait for container to start
+        id: wait-for-app
+        # Esperamos a que responda localhost:8080 (que ahora redirige al 3000 del contenedor)
         run: |
-          timeout 300 bash -c 'while [[ "$(curl -s -o /dev/null -w ''%{http_code}'' localhost:8080)" != "200" ]]; do sleep 5; done' || false
+          echo "Waiting for http://localhost:8080..."
+          timeout 60 bash -c 'while [[ "$(curl -s -o /dev/null -w ''%{http_code}'' localhost:8080)" != "200" ]]; do sleep 5; done' || false
+
+      # Mantenemos el debug por si acaso falla por otra razón (como el binding de IP)
+      - name: Debug Container Failure
+        if: failure()
+        run: |
+          echo "::error::La aplicación no respondió."
+          docker ps -a
+          docker logs demoApp
 
       - name: Test container connectivity
         run: curl -v localhost:8080
@@ -74,13 +74,12 @@ jobs:
         with:
           docker_name: 'owasp/zap2docker-stable'
           token: ${{ secrets.GITHUB_TOKEN }}
-          # Nota: Si falla la conexión, a veces se requiere usar la IP del docker bridge o network host
           target: 'http://localhost:8080'
           cmd_options: '-a -j -l WARN -z "-addoninstallall"'
           allow_issue_writing: false
 
       - name: Upload HTML report
-        if: always() # Importante: subir reporte aunque ZAP encuentre fallos
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: DAST_Report
