@@ -1,8 +1,7 @@
 name: Build Docker Compose
 
 on:
-  push:
-    branches: [ "main" ]
+  workflow_call:
 
 jobs:
   build:
@@ -10,5 +9,6 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+
       - name: Build containers
         run: docker compose build
